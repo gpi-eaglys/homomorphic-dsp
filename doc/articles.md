@@ -22,3 +22,7 @@
    * to efficiently run deep CNNs like ResNet under CKKS, 
    * addressing numerical divergence problems that arise with many layers.
 
+
+* **CryptoNets** — Gilad-Bachrach et al., ICML 2016. First HE neural network inference; introduced polynomial activation approximations. (Solid — this one is well-established)
+
+

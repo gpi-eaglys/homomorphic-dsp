@@ -1,0 +1,29 @@
+[project]
+name = "exp01"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "h5py",
+    "polars",
+    "matplotlib",
+    "seaborn",
+    "librosa",
+    "torch==2.4.0+cpu",
+    "torchaudio==2.4.0+cpu",
+    "kaldifeat==1.25.4.dev20240725+cpu.torch2.4.0",
+]
+
+[tool.uv]
+find-links = [
+    "https://csukuangfj.github.io/kaldifeat/cpu.html",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
