@@ -8,7 +8,12 @@ BLD_DIR_DBG="${REPO_DIR}/build/cmake/cmake-build-debug"
 
 cmake -B "${BLD_DIR_REL}" -S "${REPO_DIR}/lib/cpp" -DCMAKE_BUILD_TYPE=Release \
     -DWITH_NATIVEOPT=ON \
-    -DWITH_OPENMP=ON
+    -DWITH_OPENMP=ON \
+    -DBUILD_SHARED=OFF \
+    -DBUILD_STATIC=ON \
+    -DBUILD_UNITTESTS=OFF \
+    -DBUILD_EXAMPLES=OFF \
+    -DBUILD_BENCHMARKS=OFF
 
 cmake --build "${BLD_DIR_REL}" --parallel 7
 
