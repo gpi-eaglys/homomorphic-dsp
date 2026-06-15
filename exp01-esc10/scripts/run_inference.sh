@@ -8,14 +8,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXP_DIR="$(dirname "$SCRIPT_DIR")"
-BIN_PLAIN="$EXP_DIR/build/cmake-build-release/infer_plaintext"
-BIN_FHE="$EXP_DIR/build/cmake-build-release/fhe_dps_test"
-MDL_ROOT="$EXP_DIR/build/mdl"
-FEAT_ROOT="$EXP_DIR/build/fea"
-OUT_PLAIN="$EXP_DIR/build/results/plaintext"
-OUT_FHE="$EXP_DIR/build/results/fhe"
-KEYS_DIR="$EXP_DIR/build/keys"
+REPO_DIR="$(realpath "${SCRIPT_DIR}/../.." )"
+BLD_DIR="${REPO_DIR}/build"
+
+BIN_PLAIN="${BLD_DIR}/cmake/cmake-build-release/infer_plaintext"
+BIN_FHE="${BLD_DIR}/cmake/cmake-build-release/fhe_dps_test"
+MDL_ROOT="${BLD_DIR}/mdl/exp01"
+FEAT_ROOT="${BLD_DIR}/fea"
+OUT_PLAIN="${BLD_DIR}/results/plaintext"
+OUT_FHE="${BLD_DIR}/results/fhe"
+KEYS_DIR="${BLD_DIR}/keys"
+
 
 for bin in "$BIN_PLAIN" "$BIN_FHE"; do
     if [[ ! -x "$bin" ]]; then

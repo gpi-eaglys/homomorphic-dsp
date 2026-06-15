@@ -8,11 +8,13 @@ set -euo pipefail
 N=${1:-20}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXP_DIR="$(dirname "$SCRIPT_DIR")"
-BIN="$EXP_DIR/build/cmake-build-release/fhe_dps_test"
-MDL_ROOT="$EXP_DIR/build/mdl"
-FEAT_ROOT="$EXP_DIR/build/fea"
-OUT_DIR="$EXP_DIR/build/results/fhe"
+REPO_DIR="$(realpath "${SCRIPT_DIR}/../.." )"
+BIN="$REPO_DIR/build/cmake/cmake-build-release/fhe_dps_test"
+BLD_DIR="${REPO_DIR}/build"
+MDL_ROOT="$BLD_DIR/mdl/exp01"
+FEAT_ROOT="$BLD_DIR/fea"
+OUT_DIR="$BLD_DIR/results/fhe"
+
 
 if [[ ! -x "$BIN" ]]; then
     echo "Binary not found: $BIN" >&2
@@ -36,33 +38,48 @@ run_model() {
         echo "[$stem] Already done: ${#done_keys[@]}"
     fi
 
-    keys=$(head -"$N" "$feat" | awk '{print $1}')
-    i=1
-    skipped=0
+    local tmp_keys skipped=0 to_run=0
+    tmp_keys=$(mktemp)
     while IFS= read -r key; do
-        if [[ -n "${done_keys[$key]+x}" ]]; then
+        if [[ -v done_keys[$key] ]]; then
             skipped=$((skipped + 1))
         else
-            echo "[$stem] [$i/$N] $key"
-            "$BIN" "$model" "$feat" "$key" >> "$out"
+            echo "$key" >> "$tmp_keys"
+            to_run=$((to_run + 1))
         fi
-        i=$((i + 1))
-    done <<< "$keys"
+    done <<< "$(head -"$N" "$feat" | awk '{print $1}')"
+
+    if [[ $to_run -gt 0 ]]; then
+        echo "[$stem] Running $to_run sample(s)"
+        "$BIN" "$model" "$feat" "$tmp_keys" >> "$out"
+    fi
+    rm -f "$tmp_keys"
 
     [[ $skipped -gt 0 ]] && echo "[$stem] Skipped $skipped sample(s)"
     echo "[$stem] Done -> build/results/fhe/$stem.txt"
 }
 
 pids=()
-for mdl_dir in "$MDL_ROOT"/mlp-*/; do
-    stem="${mdl_dir%/}"; stem="${stem##*mlp-}"
+echo "[INFO]  Searching for models in ${MDL_ROOT}/"
+for mdl_dir in `find ${MDL_ROOT} -type d -name "mlp_*"` ; do
+    stem="${mdl_dir##*/mlp_}"  # Extract: esc10-mfb_e0577_acc=1.000
+    stem="${stem%%_e*}"         # Keep only: esc10-mfb
     model="$mdl_dir/ckks_model.json"
     feat="$FEAT_ROOT/$stem.txt"
 
-    if [[ ! -f "$model" || ! -f "$feat" ]]; then
-        echo "Skipping $stem: missing model or features" >&2
+    if [[ ! -f "$model" ]]; then
+        echo "Skipping $stem: missing model at $model" >&2
         continue
     fi
+
+    if [[ ! -f "$feat" ]]; then
+        echo "Skipping $stem: missing features at $feat" >&2
+        continue
+    fi
+
+    echo "Stem    : $stem" 
+    echo "Model   : $model" 
+    echo "Features: $feat" 
 
     run_model "$stem" "$model" "$feat" &
     pids+=($!)
