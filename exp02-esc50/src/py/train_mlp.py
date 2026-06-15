@@ -118,7 +118,7 @@ def train_all(search_dir: str) -> None:
         esc50 = Esc50Dataset(ESC50_FPATH_META, esc10=False)
         esc50.load_features(fpath_h5)
         feat = os.path.splitext(os.path.basename(fpath_h5))[0]
-        train_mlp(esc10, feat)
+        train_mlp(esc50, feat)
 
 
 if __name__ == "__main__":
