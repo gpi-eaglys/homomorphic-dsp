@@ -9,9 +9,6 @@ from torch.utils.data import DataLoader
 from common import BLD_DIR, REPO_DIR, ESC50_FPATH_META
 from fhe_dsp.esc50 import Esc50Dataset
 
-from common import BLD_DIR, REPO_DIR, ESC50_FPATH_META
-from fhe_dsp.esc50 import Esc50Dataset
-
 
 HIDDEN  = 64
 EPOCHS  = 1000
@@ -20,6 +17,7 @@ BATCH   = 32
 SEED    = 42
 
 LOG = logging.getLogger(__name__)
+torch.manual_seed(SEED)
 
 
 # ------------------------------------------------------------------
@@ -60,8 +58,7 @@ class MLP(nn.Module):
 # Training
 # ------------------------------------------------------------------
 
-def train_mlp(ds: Esc50Dataset, feat: str) -> MLP:
-    # torch.manual_seed(SEED)
+def train_mlp(ds: Esc50Dataset, feat: str, min_acc: float, patience: int) -> MLP:
     loader = DataLoader(ds, batch_size=BATCH, shuffle=True)
 
     input_dim = ds.X.shape[1]
@@ -71,9 +68,15 @@ def train_mlp(ds: Esc50Dataset, feat: str) -> MLP:
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     criterion = nn.CrossEntropyLoss()
 
+    dpath_mdl_root = os.path.join(BLD_DIR, "mdl", "exp02")
+    os.makedirs(dpath_mdl_root, exist_ok=True)
+
+    accs = [0.0]
+    n_worse = 0
     for epoch in range(EPOCHS):
         model.train()
         total_loss, correct, total = 0.0, 0, 0
+
         for X_batch, y_batch in loader:
             optimizer.zero_grad()
             logits = model(X_batch)
@@ -86,19 +89,28 @@ def train_mlp(ds: Esc50Dataset, feat: str) -> MLP:
 
         acc = correct / total
         loss = total_loss / total
+
         if acc == 1.0 or epoch % 50 == 0 or epoch == EPOCHS - 1:
             LOG.info("epoch %4d  loss %.4f  acc %.3f", epoch, loss, acc)
-        if acc == 1.0:
-            break
 
-    
-    dpath_mdl = os.path.join(BLD_DIR, "mdl", "exp02", f"mlp-{feat}")
-    os.makedirs(dpath_mdl, exist_ok=True)
-
-    torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
-    with open(os.path.join(dpath_mdl, "meta.json"), "w") as f:
-        json.dump({"classes": ds.classes, "input_dim": input_dim, "hidden": HIDDEN}, f, indent=2)
-    LOG.info("Saved model to %s", os.path.relpath(dpath_mdl, BLD_DIR))
+        dname_mdl = f"mlp_{feat}_e{epoch:04d}_acc={100*acc:.3f}"
+        if acc <= accs[-1]:
+            n_worse += 1
+            if n_worse >= patience:
+                break 
+        else:
+            n_worse = 0
+            accs.append(acc)
+            if acc > min_acc:  # save! 
+                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST", epoch, loss, acc)
+                dpath_mdl = os.path.join(dpath_mdl_root, dname_mdl)
+                os.makedirs(dpath_mdl, exist_ok=True)
+                torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
+                with open(os.path.join(dpath_mdl, "meta.json"), "w") as f:
+                    json.dump({"classes": ds.classes, "input_dim": input_dim, "hidden": HIDDEN}, f, indent=2)
+                LOG.info("Saved model to %s", os.path.relpath(dpath_mdl, BLD_DIR))
+            if acc == 1.0:
+                break
 
     return model
 
@@ -118,7 +130,7 @@ def train_all(search_dir: str) -> None:
         esc50 = Esc50Dataset(ESC50_FPATH_META, esc10=False)
         esc50.load_features(fpath_h5)
         feat = os.path.splitext(os.path.basename(fpath_h5))[0]
-        train_mlp(esc50, feat)
+        train_mlp(esc50, feat, min_acc=0.9, patience=20)
 
 
 if __name__ == "__main__":
