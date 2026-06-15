@@ -98,8 +98,10 @@ def train_mlp(ds: Esc50Dataset, feat: str, mdl_root: str, min_acc: float, patien
         else:
             n_worse = 0
             accs.append(acc)
-            if acc > min_acc:
-                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST (%s)", epoch, loss, acc, dname_mdl)
+            if acc <= min_acc:
+                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST", epoch, loss, acc)
+            else:
+                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST (saved: %s)", epoch, loss, acc, dname_mdl)
                 dpath_mdl = os.path.join(mdl_root, dname_mdl)
                 os.makedirs(dpath_mdl, exist_ok=True)
                 torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
