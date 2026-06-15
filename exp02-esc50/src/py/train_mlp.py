@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader
 from common import BLD_DIR, REPO_DIR, ESC50_FPATH_META
 from fhe_dsp.esc50 import Esc50Dataset
 
+from common import BLD_DIR, REPO_DIR, ESC50_FPATH_META
+from fhe_dsp.esc50 import Esc50Dataset
 
 
 HIDDEN  = 64
@@ -113,8 +115,8 @@ def train_all(search_dir: str) -> None:
         return
     LOG.info("Found %d .h5 file(s)", len(h5_files))
     for fpath_h5 in h5_files:
-        esc10 = Esc50Dataset(ESC50_FPATH_META, esc10=True)
-        esc10.load_features(fpath_h5)
+        esc50 = Esc50Dataset(ESC50_FPATH_META, esc10=False)
+        esc50.load_features(fpath_h5)
         feat = os.path.splitext(os.path.basename(fpath_h5))[0]
         train_mlp(esc10, feat)
 

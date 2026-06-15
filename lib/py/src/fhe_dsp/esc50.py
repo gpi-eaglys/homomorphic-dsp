@@ -41,6 +41,8 @@ class Esc50Dataset(Dataset):
         self.X = self.y = None
         with h5py.File(fpath_h5, "r") as f:
             keys = list(f.keys())
+            if not keys:
+                raise ValueError(f"Feature file is empty (0 samples): {fpath_h5}")
             self.X = np.stack([f[k][:].mean(axis=0) for k in keys])  # mean-pool frames -> (n, bins)
             self.y = np.array([
                 self.class_to_idx[self._df.filter(pl.col("filename") == k + ".wav")["category"][0]]
