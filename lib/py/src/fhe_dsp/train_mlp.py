@@ -99,13 +99,13 @@ def train_mlp(ds: Esc50Dataset, feat: str, mdl_root: str, min_acc: float, patien
             n_worse = 0
             accs.append(acc)
             if acc > min_acc:
-                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST", epoch, loss, acc)
+                LOG.info("epoch %4d  loss %.4f  acc %.3f <- BEST (%s)", epoch, loss, acc, dname_mdl)
                 dpath_mdl = os.path.join(mdl_root, dname_mdl)
                 os.makedirs(dpath_mdl, exist_ok=True)
                 torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
                 with open(os.path.join(dpath_mdl, "meta.json"), "w") as f:
                     json.dump({"feat": feat, "classes": ds.classes, "input_dim": input_dim, "hidden": HIDDEN}, f, indent=2)
-                LOG.info("Saved -> %s", dpath_mdl)
+                # LOG.info("Saved -> %s", dpath_mdl)
             if acc == 1.0:
                 break
 
