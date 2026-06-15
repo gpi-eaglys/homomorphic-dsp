@@ -13,9 +13,7 @@ import os
 import h5py
 import numpy as np
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-EXP_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
-FEAT_ROOT  = os.path.join(EXP_DIR, "build", "fea")
+from common import BLD_DIR, REPO_DIR as EXP_DIR
 
 LOG = logging.getLogger(__name__)
 
@@ -33,7 +31,7 @@ def export_h5(fpath_h5: str) -> None:
     LOG.info("Exported %d samples -> %s", len(rows), os.path.relpath(fpath_out, EXP_DIR))
 
 
-def export_all(feat_root: str = FEAT_ROOT) -> None:
+def export_all(feat_root: str) -> None:
     if not os.path.isdir(feat_root):
         LOG.warning("Feature directory not found: %s", feat_root)
         return
@@ -59,4 +57,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s]   %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    export_all()
+
+    dpath_fea = os.path.join(BLD_DIR, "fea")    
+    export_all(dpath_fea)
+    

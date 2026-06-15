@@ -1,5 +1,5 @@
 """
-export_ckks.py  --  Export a trained MLP to a flat JSON readable by fhe_server.cpp.
+export_mdl.py  --  Export a trained MLP to a flat JSON readable by fhe_server.cpp.
 
 For each trained model in build/mdl/mlp-*/  it writes  ckks_model.json  next to
 model.pt.  The C++ server reads this file; no other dependency is needed.
@@ -17,12 +17,10 @@ import logging
 import numpy as np
 import torch
 
-from common import Esc10Dataset
+from common import BLD_DIR, ESC50_FPATH_META
+from fhe_dsp.esc50 import Esc50Dataset
 from train_mlp import MLP
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-EXP_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
-BLD_DIR    = os.path.join(EXP_DIR, "build")
 MDL_ROOT   = os.path.join(BLD_DIR, "mdl")
 FEAT_ROOT  = os.path.join(BLD_DIR, "fea")
 
@@ -61,7 +59,7 @@ def export_model(dpath_mdl: str) -> None:
         LOG.warning("Feature file not found, skipping: %s", fpath_h5)
         return
 
-    ds = Esc10Dataset()
+    ds = Esc50Dataset(ESC50_FPATH_META, esc10=True)
     ds.load_features(fpath_h5)
 
     model = MLP(input_dim=meta["input_dim"], hidden=meta["hidden"], num_classes=len(meta["classes"]))

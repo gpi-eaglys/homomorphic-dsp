@@ -12,7 +12,12 @@
 uv run src/py/extract-kaldi-features.py
 ```
 
-* 
+* train MLP
+```
+uv run --package exp01  python exp01-esc10/src/py/train_mlp.py
+```
+
+
 
 
 ## Data-U: Urban Sound
