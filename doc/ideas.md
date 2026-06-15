@@ -82,3 +82,44 @@ How I'd approach it concretely:
 All of this runs on-prem, and the backbone exports to ONNX for your C++ path, consistent with the rest of your stack.
 
 A couple of questions that would let me get specific: is this a fixed known set of targets (helicopter, maybe a few other aircraft) or open-ended? And do you have any labeled audio from the actual deployment environment yet, or would you be starting from public datasets? That determines whether this is mostly a data-collection task or mostly a modeling task.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+So, from a CKKS point of view, if weights are between -1000 and 1000, is that bad?
+Yes, that's bad. Here's why:
+
+The problem with large weights:
+
+With x² activation, values compound fast:
+
+Input: [-3, 3] (normalized)
+After fc1 with weights in [-1000, 1000]: could be [-64000, 64000] (64 hidden units × 1000 × 3)
+After act1 (x²): [0, 4 × 10⁹]
+After fc2: astronomical
+Why this kills CKKS:
+
+CKKS encodes values with a fixed-point scale (e.g. 2⁴⁰). If your values span 10⁹, you've burned most of your precision budget on the integer part — leaving almost no bits for the fractional part. The result is catastrophic rounding error.
+
+The root cause:
+
+x² is unbounded and your network likely didn't learn small weights because ReLU-style training doesn't penalize large pre-activations the same way. With x², large weights = exploding activations = loss of CKKS precision.
+
+Fixes:
+
+Weight regularization — add L2 penalty (weight_decay in Adam) to keep weights small
+Scale the output of each x² — multiply by a learned or fixed scalar α < 1 after each activation
+Clip weights at export time — dangerous, hurts accuracy
+Re-train with smaller init — std=0.01 instead of default
+The most practical: add weight_decay=1e-3 to the Adam optimizer and retrain. Want me to add that?

@@ -1,3 +1,6 @@
 [submodule "extern/openfhe"]
 	path = extern/openfhe
 	url = git@github.com:openfheorg/openfhe-development.git
+[submodule "extern/nlohmann"]
+	path = extern/nlohmann
+	url = https://github.com/nlohmann/json.git
