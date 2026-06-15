@@ -36,10 +36,19 @@ for mdl_dir in "$MDL_ROOT"/mlp-*/; do
     model="$mdl_dir/ckks_model.json"
     feat="$FEAT_ROOT/$stem.txt"
 
-    if [[ ! -f "$model" || ! -f "$feat" ]]; then
-        echo "Skipping $stem: missing model or features" >&2
+    if [[ ! -f "$model" ]]; then
+        echo "Skipping $stem: missing model at $model" >&2
         continue
     fi
+
+    if [[ ! -f "$feat" ]]; then
+        echo "Skipping $stem: missing features at $feat" >&2
+        continue
+    fi
+
+    echo "Stem    : $stem" 
+    echo "Model   : $model" 
+    echo "Features: $feat" 
 
     echo "--- plaintext: $stem ---"
     "$BIN_PLAIN" "$model" "$feat" > "$OUT_PLAIN/$stem.txt"
