@@ -1,37 +1,17 @@
 import os
 import logging
-from collections.abc import Generator
 
 import h5py
 import torchaudio
 import kaldifeat
-import polars as pl
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-EXP_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
-BLD_DIR = os.path.join(EXP_DIR, "build")
-REPO_DIR = os.path.abspath(os.path.join(EXP_DIR, ".."))
-# download META_CSV with 'exp01/scripts/download-dataset.sh' && extract
-META_CSV = os.path.join(REPO_DIR, "assets/esc-50/ESC-50-master/meta/esc50.csv")
-AUDIO_DIR = os.path.join(REPO_DIR, "assets/esc-50/ESC-50-master/audio")
+from common import REPO_DIR, ESC50_FPATH_META
+
+BLD_DIR = os.path.join(REPO_DIR, "build")
+from fhe_dsp.esc50 import Esc50Dataset
 
 
 LOG = logging.getLogger(__name__)
-
-
-def iter_esc10() -> Generator[str, None, None]:
-    """
-    Yield absolute paths to audio files in the ESC-10 sub-category of ESC-50. Skips missing files.
-    """
-    df = pl.read_csv(META_CSV).filter(pl.col("esc10"))
-    LOG.debug("Loaded %d esc10 rows", len(df))
-    for filename in df["filename"]:
-        path = os.path.join(AUDIO_DIR, filename)
-        if os.path.isfile(path):
-            yield path
-        else:
-            LOG.warning("Cannot find audio: %s", path)
-
 
 
 def _get_fe_for_mfb(nbins: int = 40):
@@ -72,20 +52,22 @@ def get_fe(feat: str):
 
 def do_feat_ext(feat = "mfb"):
     """
-    Does feature extraction for "esc10" subset.
+    Does feature extraction for the whole "esc50" subset.
     """
     dpath_feat = os.path.join(BLD_DIR, "fea")
-    fpath_feat = os.path.join(dpath_feat, f"esc10-{feat}.h5")
+    fpath_feat = os.path.join(dpath_feat, f"esc50-{feat}.h5")
 
     if os.path.isfile(fpath_feat):
         LOG.info(f"Skipping extraction: found feature file: {os.path.relpath(fpath_feat, REPO_DIR)}.")
         return
     os.makedirs(dpath_feat, exist_ok=True)
 
+    esc50 = Esc50Dataset(ESC50_FPATH_META, esc10=False)
+
     fe = get_fe(feat)
 
     with h5py.File(fpath_feat, "w") as f:
-        for i, fpath_wav in enumerate(iter_esc10()):
+        for i, fpath_wav in enumerate(esc50.iter_audio()):
             key = os.path.splitext(os.path.basename(fpath_wav))[0]
             wave, hz = torchaudio.load(fpath_wav)
             wave = wave.squeeze()
@@ -99,7 +81,8 @@ def do_feat_ext(feat = "mfb"):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]   %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    LOG.debug("Loading metadata from %s", META_CSV)
+    LOG.debug("Loading metadata from %s", ESC50_FPATH_META)
     do_feat_ext("mfb")
-    # do_feat_ext("mfcc")
+    do_feat_ext("mfcc")
+
 

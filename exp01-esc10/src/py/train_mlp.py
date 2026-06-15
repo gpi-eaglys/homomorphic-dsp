@@ -6,12 +6,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from common import Esc10Dataset
+from common import BLD_DIR, REPO_DIR, ESC50_FPATH_META
+from fhe_dsp.esc50 import Esc50Dataset
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-EXP_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
-BLD_DIR    = os.path.join(EXP_DIR, "build")
-FEAT_ROOT  = os.path.join(BLD_DIR, "fea")
 
 
 HIDDEN  = 64
@@ -61,7 +58,7 @@ class MLP(nn.Module):
 # Training
 # ------------------------------------------------------------------
 
-def train(ds: Esc10Dataset, feat: str) -> MLP:
+def train_mlp(ds: Esc50Dataset, feat: str) -> MLP:
     # torch.manual_seed(SEED)
     loader = DataLoader(ds, batch_size=BATCH, shuffle=True)
 
@@ -93,7 +90,7 @@ def train(ds: Esc10Dataset, feat: str) -> MLP:
             break
 
     
-    dpath_mdl = os.path.join(BLD_DIR, "mdl", f"mlp-{feat}")
+    dpath_mdl = os.path.join(BLD_DIR, "mdl", "exp01", f"mlp-{feat}")
     os.makedirs(dpath_mdl, exist_ok=True)
 
     torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
@@ -104,24 +101,25 @@ def train(ds: Esc10Dataset, feat: str) -> MLP:
     return model
 
 
-def train_all(search_dir: str = FEAT_ROOT) -> None:
-    h5_files = [
+def train_all(search_dir: str) -> None:
+    h5_files = [ 
         os.path.join(root, fname)
         for root, _, files in os.walk(search_dir)
-        for fname in files
-        if fname.endswith(".h5")
+            for fname in files
+                if fname.startswith("esc10-") and fname.endswith(".h5")
     ]
     if not h5_files:
         LOG.warning("No .h5 files found under %s", search_dir)
         return
     LOG.info("Found %d .h5 file(s)", len(h5_files))
     for fpath_h5 in h5_files:
-        ds = Esc10Dataset()
-        ds.load_features(fpath_h5)
+        esc10 = Esc50Dataset(ESC50_FPATH_META, esc10=True)
+        esc10.load_features(fpath_h5)
         feat = os.path.splitext(os.path.basename(fpath_h5))[0]
-        train(ds, feat)
+        train_mlp(esc10, feat)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]   %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    train_all(FEAT_ROOT)
+    dpath_fea = os.path.join(BLD_DIR, "fea")
+    train_all(dpath_fea)

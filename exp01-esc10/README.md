@@ -1,6 +1,18 @@
 # Experiment 01: Urban noises 
 * The goal is to classify urban noises homomorphemically
 
+# TL;DR 
+* download audio 
+```
+./scripts/download-dataset.sh 
+```
+
+* extract features (MFB and MFCC)
+```
+uv run src/py/extract-kaldi-features.py
+```
+
+* 
 
 
 ## Data-U: Urban Sound

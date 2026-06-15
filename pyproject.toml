@@ -1,17 +1,22 @@
 [project]
-name = "exp01"
+name = "homomorphic-dsp"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "numpy",
-    "h5py",
-    "polars",
-    "matplotlib",
-    "seaborn",
-    "librosa",
-    "torch==2.4.0+cpu",
-    "torchaudio==2.4.0+cpu",
-    "kaldifeat==1.25.4.dev20240725+cpu.torch2.4.0",
+    "fhe-dsp",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["lib/py/tests"]
+
+[tool.uv.workspace]
+members = [
+    "lib/py",
+    "exp01-esc10",
+    "exp02-esc50",
 ]
 
 [tool.uv]
@@ -25,5 +30,6 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.uv.sources]
+fhe-dsp = { workspace = true }
 torch = { index = "pytorch-cpu" }
 torchaudio = { index = "pytorch-cpu" }

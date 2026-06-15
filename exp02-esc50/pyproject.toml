@@ -1,0 +1,11 @@
+[project]
+name = "exp02"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fhe-dsp",
+    "kaldifeat==1.25.4.dev20240725+cpu.torch2.4.0",
+]
+
+[tool.uv.sources]
+fhe-dsp = { workspace = true }
