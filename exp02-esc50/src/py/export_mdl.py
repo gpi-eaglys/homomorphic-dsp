@@ -13,9 +13,9 @@ if __name__ == "__main__":
     )
 
     export_all(
-        mdl_root       = os.path.join(BLD_DIR, "mdl", "exp01"),
+        mdl_root       = os.path.join(BLD_DIR, "mdl", "exp02"),
         feat_root      = os.path.join(BLD_DIR, "fea"),
         esc50_metafile = ESC50_FPATH_META,
-        esc10          = True,
+        esc10          = False,
         mlp_cls        = MLP,
     )
