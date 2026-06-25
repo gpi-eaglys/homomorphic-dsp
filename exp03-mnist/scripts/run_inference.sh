@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run plaintext and FHE inference for all models and save results.
+# Run plaintext and FHE inference for all exp03 models and save results.
 #
 # Plaintext: all samples, results -> build/results/plaintext/<stem>.txt (always overwritten)
 # FHE:       pending samples only, results -> build/results/fhe/<stem>.txt (append only)
@@ -13,7 +13,7 @@ BLD_DIR="${REPO_DIR}/build"
 
 BIN_PLAIN="${BLD_DIR}/cmake/cmake-build-release/infer_plaintext"
 BIN_FHE="${BLD_DIR}/cmake/cmake-build-release/fhe_dps_test"
-MDL_ROOT="${BLD_DIR}/mdl/exp02"
+MDL_ROOT="${BLD_DIR}/mdl/exp03"
 FEAT_ROOT="${BLD_DIR}/fea"
 OUT_PLAIN="${BLD_DIR}/results/plaintext"
 OUT_FHE="${BLD_DIR}/results/fhe"
@@ -31,7 +31,7 @@ mkdir -p "$OUT_PLAIN" "$OUT_FHE" "$KEYS_DIR"
 
 TS=$(date +%Y%m%d_%H%M%S)
 
-for mdl_dir in "$MDL_ROOT"/mlp-*/; do
+for mdl_dir in "$MDL_ROOT"/run_*/mlp-*/; do
     stem="${mdl_dir##*/mlp-}"
     stem="${stem%%_e*}"
 
@@ -48,9 +48,9 @@ for mdl_dir in "$MDL_ROOT"/mlp-*/; do
         continue
     fi
 
-    echo "Stem    : $stem" 
-    echo "Model   : $model" 
-    echo "Features: $feat" 
+    echo "Stem    : $stem"
+    echo "Model   : $model"
+    echo "Features: $feat"
 
     echo "--- plaintext: $stem ---"
     "$BIN_PLAIN" "$model" "$feat" > "$OUT_PLAIN/$stem.txt"

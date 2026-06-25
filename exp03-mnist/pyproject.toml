@@ -1,0 +1,10 @@
+[project]
+name = "exp03"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fhe-dsp",
+]
+
+[tool.uv.sources]
+fhe-dsp = { workspace = true }

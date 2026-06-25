@@ -17,6 +17,7 @@ members = [
     "lib/py",
     "exp01-esc10",
     "exp02-esc50",
+    "exp03-mnist",
 ]
 
 [tool.uv]
