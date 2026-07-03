@@ -61,9 +61,9 @@ run_model() {
 
 pids=()
 echo "[INFO]  Searching for models in ${MDL_ROOT}/"
-for mdl_dir in `find ${MDL_ROOT} -type d -name "mlp_*"` ; do
-    stem="${mdl_dir##*/mlp_}"  # Extract: esc10-mfb_e0577_acc=1.000
-    stem="${stem%%_e*}"         # Keep only: esc10-mfb
+for mdl_dir in `find ${MDL_ROOT} -type d -name "mlp-*"` ; do
+    stem="${mdl_dir##*/mlp-}"  # strip path + "mlp-"  ->  esc50-mfb_e1010_acc=0.979
+    stem="${stem%%_e*}"         # strip "_e..." suffix  ->  esc50-mfb
     model="$mdl_dir/ckks_model.json"
     feat="$FEAT_ROOT/$stem.txt"
 
