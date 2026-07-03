@@ -12,37 +12,36 @@ from torch.utils.data import DataLoader, Dataset, random_split
 
 from common import BLD_DIR
 
-HIDDEN       = 64
+#HIDDEN       = [256, 256, 256]
+#HIDDEN       = [512, 256, 128, 64, 32]
+HIDDEN       = [64, 32, 32]
 EPOCHS       = 100000
-LR           = 1e-3
-BATCH        = 32
+LR           = 5e-3
+BATCH        = 64
 SEED         = 42
-MIN_ACC      = 0.9
-PATIENCE     = 100
+MIN_ACC      = 0.95
+PATIENCE     = 500
+PATIENCE_TRAIN_ACC = 50
 DEVSET_SIZE  = 800   # held-out samples for evaluation (10% of MNIST test set)
 
 LOG = logging.getLogger(__name__)
 torch.manual_seed(SEED)
 
 
-class SquareActivation(nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * x
-
-
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden: int, num_classes: int) -> None:
+    def __init__(self, input_dim: int, hidden: list[int], num_classes: int) -> None:
         super().__init__()
-        self.fc1  = nn.Linear(input_dim, hidden)
-        self.act1 = SquareActivation()
-        self.fc2  = nn.Linear(hidden, hidden)
-        self.act2 = SquareActivation()
-        self.fc3  = nn.Linear(hidden, num_classes)
+        layers: list[nn.Module] = []
+        in_dim = input_dim
+        for h in hidden:
+            layers.append(nn.Linear(in_dim, h))
+            layers.append(nn.GELU())
+            in_dim = h
+        layers.append(nn.Linear(in_dim, num_classes))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.act1(self.fc1(x))
-        x = self.act2(self.fc2(x))
-        return self.fc3(x)
+        return self.net(x)
 
 
 class MnistDataset(Dataset):
@@ -88,7 +87,8 @@ def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
     run_dir = os.path.join(mdl_root, "run_" + datetime.now().strftime("%Y%m%d-%H%M"))
     os.makedirs(run_dir, exist_ok=True)
 
-    model = MLP(input_dim=784, hidden=HIDDEN, num_classes=10).to(device)
+    input_dim = ds.X.shape[1]
+    model = MLP(input_dim=input_dim, hidden=HIDDEN, num_classes=10).to(device)
     LOG.info("run_dir=%s  train=%d  dev=%d  feature='%s'  device=%s",
              run_dir, len(train_ds), len(dev_ds), feat, device)
 
@@ -106,6 +106,7 @@ def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
         step = 0
         best_dev_acc = 0.0
         n_worse = 0
+        n_perfect_train = 0
 
         for epoch in range(EPOCHS):
             model.train()
@@ -135,6 +136,14 @@ def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
             ew.writerow([epoch, f"{train_loss:7.3f}", f"{train_acc:.6f}", f"{dev_acc:.6f}"])
             epoch_fh.flush()
 
+            if train_acc >= 1.0:
+                n_perfect_train += 1
+                if n_perfect_train >= PATIENCE_TRAIN_ACC:
+                    LOG.info("epoch %4d train_acc 100%% for %d consecutive epochs — stopping", epoch, PATIENCE_TRAIN_ACC) 
+                    break
+            else:
+                n_perfect_train = 0
+
             if dev_acc > 0.99999 or epoch % 10 == 0 or epoch == EPOCHS - 1:
                 LOG.info("epoch %4d  loss %.4f  train_acc %.5f  dev_acc %.5f", epoch, train_loss, train_acc, dev_acc)
 
@@ -155,7 +164,7 @@ def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
                         json.dump({
                             "feat":      feat,
                             "classes":   ds.classes,
-                            "input_dim": 784,
+                            "input_dim": input_dim,
                             "hidden":    HIDDEN,
                             "mean":      ds.mean.tolist(),
                             "std":       ds.std.tolist(),

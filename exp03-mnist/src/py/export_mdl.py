@@ -46,15 +46,17 @@ def export_model(dpath_mdl: str) -> None:
         LOG.info("Skipping (already exported): %s", fpath_out)
         return
 
-    model = MLP(input_dim=meta["input_dim"], hidden=meta["hidden"], num_classes=len(meta["classes"]))
+    hidden = meta["hidden"]  # list[int]
+    model = MLP(input_dim=meta["input_dim"], hidden=hidden, num_classes=len(meta["classes"]))
     model.load_state_dict(torch.load(os.path.join(dpath_mdl, "model.pt"), weights_only=True, map_location="cpu"))
     model.eval()
 
-    W1, b1 = _layer_params(model.fc1)
-    W2, b2 = _layer_params(model.fc2)
-    W3, b3 = _layer_params(model.fc3)
+    # Extract (W, b) for each Linear layer in order
+    linear_layers = [m for m in model.net if isinstance(m, torch.nn.Linear)]
+    layer_params  = [_layer_params(l) for l in linear_layers]
 
-    dim = next_pow2(max(meta["input_dim"], meta["hidden"], len(meta["classes"])))
+    all_dims = [meta["input_dim"]] + hidden + [len(meta["classes"])]
+    dim = next_pow2(max(all_dims))
     LOG.info("packed_dim = %d", dim)
 
     mean = np.array(meta["mean"])
@@ -62,19 +64,16 @@ def export_model(dpath_mdl: str) -> None:
 
     doc = {
         "input_dim":   meta["input_dim"],
-        "hidden":      meta["hidden"],
+        "hidden":      hidden,
         "num_classes": len(meta["classes"]),
         "packed_dim":  dim,
         "classes":     meta["classes"],
         "mean":        pad(mean, dim),
         "std":         pad(std,  dim),
-        "W1_diag":     diagonals(W1, dim),
-        "b1":          pad(b1, dim),
-        "W2_diag":     diagonals(W2, dim),
-        "b2":          pad(b2, dim),
-        "W3_diag":     diagonals(W3, dim),
-        "b3":          pad(b3, dim),
     }
+    for i, (W, b) in enumerate(layer_params):
+        doc[f"W{i+1}_diag"] = diagonals(W, dim)
+        doc[f"b{i+1}"]      = pad(b, dim)
 
     with open(fpath_out, "w") as f:
         json.dump(doc, f)
