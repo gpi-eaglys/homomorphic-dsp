@@ -2,15 +2,15 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable
 
-import h5py
 import mlflow
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim.adam import Adam
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+
+from train_mlp import ACTIVATION_MAP, MnistDataset, Quadratic, _eval_acc
 
 EPOCHS = 100000
 SEED   = 42
@@ -18,74 +18,79 @@ SEED   = 42
 LOG = logging.getLogger(__name__)
 torch.manual_seed(SEED)
 
-
-@dataclass
-class ExperimentConfig:
-    layers:             list[int]
-    activation:         Callable[[], nn.Module]
-    dropout:            float = 0.0
-    lr:                 float = 5e-3
-    batch:              int   = 64
-    min_acc:            float = 0.97
-    patience:           int   = 150
-    patience_train_acc: int   = 50
-    # metadata only — not used by the model or training loop
-    run_id:             str   = ""
-    param_hash:         str   = ""
-    schema_hash:        str   = ""
-
-
-class Quadratic(nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * x
-
-
-ACTIVATION_MAP: dict[str, Callable[[], nn.Module]] = {
-    "GELU":      nn.GELU,
-    "ReLU":      nn.ReLU,
-    "Sigmoid":   nn.Sigmoid,
-    "Quadratic": Quadratic,
-    "Tanh":      nn.Tanh,
+# AvgPool2d is a linear op (CKKS-compatible); MaxPool2d requires comparisons
+# (not CKKS-compatible). Only "avg"-pool configs should ever be exported to
+# CKKS — see is_ckks_compatible() below.
+POOL_MAP: dict[str, Callable[[int], nn.Module]] = {
+    "max": nn.MaxPool2d,
+    "avg": nn.AvgPool2d,
 }
 
 
-class MLP(nn.Module):
-    def __init__(self, layers: list[int], activation: Callable[[], nn.Module], dropout: float = 0.0) -> None:
+@dataclass
+class ExperimentConfig:
+    conv_channels:       list[int]  # e.g. [1, 16, 32] — first entry is input channels (1 for grayscale MNIST)
+    kernel_size:         int
+    fc_layers:           list[int]  # e.g. [128, 10] — last entry must be num_classes
+    activation:          Callable[[], nn.Module]
+    pool:                str   = "max"  # "max" or "avg" — see POOL_MAP
+    dropout:             float = 0.0
+    lr:                  float = 5e-3
+    batch:               int   = 64
+    min_acc:             float = 0.97
+    patience:            int   = 150
+    patience_train_acc:  int   = 50
+    # metadata only — not used by the model or training loop
+    run_id:              str   = ""
+    param_hash:          str   = ""
+    schema_hash:         str   = ""
+
+
+def is_ckks_compatible(cfg: ExperimentConfig) -> bool:
+    return cfg.pool == "avg" and cfg.activation.__name__ != "ReLU"
+
+
+class CNN(nn.Module):
+    def __init__(self, conv_channels: list[int], kernel_size: int, fc_layers: list[int],
+                 activation: Callable[[], nn.Module], pool: str = "max", dropout: float = 0.0) -> None:
         super().__init__()
-        mods: list[nn.Module] = []
-        for i in range(len(layers) - 1):
-            mods.append(nn.Linear(layers[i], layers[i + 1]))
-            if i < len(layers) - 2:
-                mods.append(activation())
+        pool_cls = POOL_MAP[pool]
+        conv_mods: list[nn.Module] = []
+        for i in range(len(conv_channels) - 1):
+            conv_mods.append(nn.Conv2d(conv_channels[i], conv_channels[i + 1], kernel_size, padding=kernel_size // 2))
+            conv_mods.append(activation())
+            conv_mods.append(pool_cls(2))
+            if dropout > 0.0:
+                conv_mods.append(nn.Dropout(dropout))
+        self.conv = nn.Sequential(*conv_mods)
+
+        with torch.no_grad():
+            flat_dim = self.conv(torch.zeros(1, conv_channels[0], 28, 28)).numel()
+
+        fc_mods: list[nn.Module] = []
+        dims = [flat_dim] + fc_layers
+        for i in range(len(dims) - 1):
+            fc_mods.append(nn.Linear(dims[i], dims[i + 1]))
+            if i < len(dims) - 2:
+                fc_mods.append(activation())
                 if dropout > 0.0:
-                    mods.append(nn.Dropout(dropout))
-        self.net = nn.Sequential(*mods)
+                    fc_mods.append(nn.Dropout(dropout))
+        self.fc = nn.Sequential(*fc_mods)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
-
-
-class MnistDataset(Dataset):
-    def __init__(self, fpath_h5: str, mean: Optional[np.ndarray] = None, std: Optional[np.ndarray] = None) -> None:
-        with h5py.File(fpath_h5, "r") as h5:
-            X      = np.asarray(h5["X"])  # (N, 784) float32
-            self.y = np.asarray(h5["y"])  # (N,) int64
-        self.classes = [str(i) for i in range(10)]
-        self.mean = X.mean(axis=0) if mean is None else mean
-        self.std  = (X.std(axis=0) + 1e-6) if std is None else std
-        self.X = ((X - self.mean) / self.std).astype(np.float32)
-
-    def __len__(self) -> int:
-        return len(self.y)
-
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        return torch.from_numpy(self.X[idx]), self.y[idx]
+        x = x.view(x.shape[0], 1, 28, 28)
+        x = self.conv(x)
+        x = x.flatten(1)
+        return self.fc(x)
 
 
 def _cfg_to_dict(cfg: ExperimentConfig) -> dict:
     return {
-        "layers":             cfg.layers,
+        "conv_channels":      cfg.conv_channels,
+        "kernel_size":        cfg.kernel_size,
+        "fc_layers":          cfg.fc_layers,
         "activation":         cfg.activation.__name__,
+        "pool":               cfg.pool,
         "dropout":            cfg.dropout,
         "lr":                 cfg.lr,
         "batch":              cfg.batch,
@@ -98,17 +103,6 @@ def _cfg_to_dict(cfg: ExperimentConfig) -> dict:
     }
 
 
-def _eval_acc(model: MLP, loader: DataLoader, device: torch.device) -> float:
-    model.eval()
-    correct, total = 0, 0
-    with torch.no_grad():
-        for X_batch, y_batch in loader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-            correct += (model(X_batch).argmax(1) == y_batch).sum().item()
-            total   += len(y_batch)
-    return correct / total
-
-
 def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: ExperimentConfig) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -118,14 +112,16 @@ def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: Experimen
     train_loader = DataLoader(train_ds, batch_size=cfg.batch, shuffle=True)
     test_loader  = DataLoader(test_ds,  batch_size=cfg.batch, shuffle=False)
 
-    dpath_run = os.path.join(mdl_root, f"mlp-mnist_{cfg.param_hash}")
+    dpath_run = os.path.join(mdl_root, f"cnn-mnist_{cfg.param_hash}")
     os.makedirs(dpath_run, exist_ok=True)
 
-    assert train_ds.X.shape[1] == cfg.layers[0], \
-        f"Input dim mismatch: data has {train_ds.X.shape[1]}, config has {cfg.layers[0]}"
+    assert cfg.conv_channels[0] == 1, \
+        f"Input channel mismatch: MNIST is grayscale (1 channel), config has {cfg.conv_channels[0]}"
 
-    model = MLP(layers=cfg.layers, activation=cfg.activation, dropout=cfg.dropout).to(device)
-    LOG.info("train=%d  test=%d  device=%s  layers=%s", len(train_ds), len(test_ds), device, cfg.layers)
+    model = CNN(conv_channels=cfg.conv_channels, kernel_size=cfg.kernel_size, fc_layers=cfg.fc_layers,
+                activation=cfg.activation, pool=cfg.pool, dropout=cfg.dropout).to(device)
+    LOG.info("train=%d  test=%d  device=%s  conv_channels=%s  fc_layers=%s  pool=%s",
+             len(train_ds), len(test_ds), device, cfg.conv_channels, cfg.fc_layers, cfg.pool)
 
     optimizer = Adam(model.parameters(), lr=cfg.lr)
     criterion = nn.CrossEntropyLoss()
@@ -133,11 +129,14 @@ def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: Experimen
     with mlflow.start_run():
         mlflow.set_tags({"run_id": cfg.run_id, "param_hash": cfg.param_hash, "schema_hash": cfg.schema_hash})
         mlflow.log_params({
-            "layers":     cfg.layers,
-            "activation": cfg.activation.__name__,
-            "dropout":    cfg.dropout,
-            "lr":         cfg.lr,
-            "batch":      cfg.batch,
+            "conv_channels": cfg.conv_channels,
+            "kernel_size":   cfg.kernel_size,
+            "fc_layers":     cfg.fc_layers,
+            "activation":    cfg.activation.__name__,
+            "pool":          cfg.pool,
+            "dropout":       cfg.dropout,
+            "lr":            cfg.lr,
+            "batch":         cfg.batch,
         })
 
         config_path = os.path.join(dpath_run, "config.json")
@@ -213,5 +212,3 @@ def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: Experimen
         with open(result_path, "w") as f:
             json.dump({"best_test_acc": best_test_acc, "best_epoch": best_epoch}, f, indent=2)
         mlflow.log_artifact(result_path)
-
-

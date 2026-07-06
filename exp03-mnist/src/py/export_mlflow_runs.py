@@ -20,7 +20,7 @@ from common import BLD_DIR
 
 LOG = logging.getLogger(__name__)
 
-EXPERIMENT_NAME = "CKKS - exp03 - MNIST"
+EXPERIMENT_NAME = "exp03-mnist-mlp"
 
 
 def _best_epoch_metrics(client: MlflowClient, run_id: str) -> dict:
