@@ -100,7 +100,7 @@ def _eval_acc(model: MLP, loader: DataLoader, device: torch.device) -> float:
     return correct / total
 
 
-def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: ExperimentConfig) -> None:
+def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: ExperimentConfig, run_tags: Optional[dict] = None) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_ds = MnistDataset(fpath_train_h5)
@@ -121,6 +121,8 @@ def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: Experimen
     criterion = nn.CrossEntropyLoss()
 
     with mlflow.start_run():
+        if run_tags:
+            mlflow.set_tags(run_tags)
         mlflow.log_params({
             "layers":     cfg.layers,
             "activation": cfg.activation.__name__,

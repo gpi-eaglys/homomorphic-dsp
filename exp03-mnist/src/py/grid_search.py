@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os
+import socket
 import sys
 
 import mlflow
@@ -28,6 +29,7 @@ GRID = {
 def run_grid() -> None:
     fea_dir  = os.path.join(BLD_DIR, "fea")
     mdl_root = os.path.join(BLD_DIR, "mdl", "exp03")
+    run_id   = f"{socket.gethostname()}-{os.getpid()}"
 
     keys   = list(GRID.keys())
     combos = list(itertools.product(*GRID.values()))
@@ -53,6 +55,7 @@ def run_grid() -> None:
                 fpath_test_h5 =os.path.join(fea_dir, "mnist-test.h5"),
                 mdl_root      =mdl_root,
                 cfg           =cfg,
+                run_tags      ={"run_id": run_id},
             )
         except Exception:
             LOG.exception("Run %d/%d failed — skipping", i, total)
