@@ -1,4 +1,5 @@
 import numpy as np 
+from numpy.polynomial import Polynomial
 
 
 # First we set the parameters
@@ -10,9 +11,6 @@ xi = np.exp(2 * np.pi * 1j / M)
 
 print(xi)
 
-
-
-from numpy.polynomial import Polynomial
 
 class CKKSEncoder:
     """Basic CKKS encoder to encode complex vectors into polynomials."""

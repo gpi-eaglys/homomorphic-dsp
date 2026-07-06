@@ -217,3 +217,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 assets/
+
+# MLflow (real tracking data lives in build/, gitignored above; these are stray
+# artifacts from runs launched with an unset/relative tracking URI)
+mlflow.db
+mlruns/
