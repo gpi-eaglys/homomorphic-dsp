@@ -1,57 +1,85 @@
-import csv
 import json
 import logging
 import os
-from datetime import datetime
+import sys
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 import h5py
+import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.optim.adam import Adam
+from torch.utils.data import DataLoader, Dataset
 
 from common import BLD_DIR
 
-#HIDDEN       = [256, 256, 256]
-#HIDDEN       = [512, 256, 128, 64, 32]
-HIDDEN       = [64, 32, 32]
-EPOCHS       = 100000
-LR           = 5e-3
-BATCH        = 64
-SEED         = 42
-MIN_ACC      = 0.95
-PATIENCE     = 500
-PATIENCE_TRAIN_ACC = 50
-DEVSET_SIZE  = 800   # held-out samples for evaluation (10% of MNIST test set)
+EPOCHS = 100000
+SEED   = 42
 
 LOG = logging.getLogger(__name__)
 torch.manual_seed(SEED)
 
 
+@dataclass
+class ExperimentConfig:
+    layers:             list[int]
+    activation:         Callable[[], nn.Module]
+    dropout:            float = 0.0
+    lr:                 float = 5e-3
+    batch:              int   = 64
+    min_acc:            float = 0.97
+    patience:           int   = 150
+    patience_train_acc: int   = 50
+
+
+class Quadratic(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * x
+
+
+ACTIVATION_MAP: dict[str, Callable[[], nn.Module]] = {
+    "GELU":      nn.GELU,
+    "ReLU":      nn.ReLU,
+    "Sigmoid":   nn.Sigmoid,
+    "Quadratic": Quadratic,
+    "Tanh":      nn.Tanh,
+}
+
+CONFIGS: dict[str, ExperimentConfig] = {
+    "baseline":   ExperimentConfig(layers=[784, 64, 32, 32, 10],        activation=nn.GELU),
+    "wide":       ExperimentConfig(layers=[784, 256, 256, 10],           activation=nn.GELU),
+    "relu-deep":  ExperimentConfig(layers=[784, 512, 256, 128, 10],      activation=nn.ReLU),
+    "tanh-small": ExperimentConfig(layers=[784, 64, 32, 10],             activation=nn.Tanh),
+    "dropout":    ExperimentConfig(layers=[784, 512, 256, 128, 10],      activation=nn.ReLU, dropout=0.3),
+}
+
+
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden: list[int], num_classes: int) -> None:
+    def __init__(self, layers: list[int], activation: Callable[[], nn.Module], dropout: float = 0.0) -> None:
         super().__init__()
-        layers: list[nn.Module] = []
-        in_dim = input_dim
-        for h in hidden:
-            layers.append(nn.Linear(in_dim, h))
-            layers.append(nn.GELU())
-            in_dim = h
-        layers.append(nn.Linear(in_dim, num_classes))
-        self.net = nn.Sequential(*layers)
+        mods: list[nn.Module] = []
+        for i in range(len(layers) - 1):
+            mods.append(nn.Linear(layers[i], layers[i + 1]))
+            if i < len(layers) - 2:
+                mods.append(activation())
+                if dropout > 0.0:
+                    mods.append(nn.Dropout(dropout))
+        self.net = nn.Sequential(*mods)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
 
 class MnistDataset(Dataset):
-    def __init__(self, fpath_h5: str) -> None:
-        with h5py.File(fpath_h5, "r") as f:
-            X = f["X"][:]       # (N, 784) float32
-            self.y = f["y"][:]  # (N,) int64
+    def __init__(self, fpath_h5: str, mean: Optional[np.ndarray] = None, std: Optional[np.ndarray] = None) -> None:
+        with h5py.File(fpath_h5, "r") as h5:
+            X      = np.asarray(h5["X"])  # (N, 784) float32
+            self.y = np.asarray(h5["y"])  # (N,) int64
         self.classes = [str(i) for i in range(10)]
-        self.mean = X.mean(axis=0)
-        self.std  = X.std(axis=0) + 1e-6
+        self.mean = X.mean(axis=0) if mean is None else mean
+        self.std  = (X.std(axis=0) + 1e-6) if std is None else std
         self.X = ((X - self.mean) / self.std).astype(np.float32)
 
     def __len__(self) -> int:
@@ -72,39 +100,38 @@ def _eval_acc(model: MLP, loader: DataLoader, device: torch.device) -> float:
     return correct / total
 
 
-def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
+def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: ExperimentConfig, run_tags: Optional[dict] = None) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    feat = os.path.splitext(os.path.basename(fpath_h5))[0]
-    ds = MnistDataset(fpath_h5)
 
-    train_ds, dev_ds = random_split(
-        ds, [len(ds) - devset_size, devset_size],
-        generator=torch.Generator().manual_seed(SEED),
-    )
-    train_loader = DataLoader(train_ds, batch_size=BATCH, shuffle=True)
-    dev_loader   = DataLoader(dev_ds,   batch_size=BATCH, shuffle=False)
+    train_ds = MnistDataset(fpath_train_h5)
+    test_ds  = MnistDataset(fpath_test_h5, mean=train_ds.mean, std=train_ds.std)
 
-    run_dir = os.path.join(mdl_root, "run_" + datetime.now().strftime("%Y%m%d-%H%M"))
-    os.makedirs(run_dir, exist_ok=True)
+    train_loader = DataLoader(train_ds, batch_size=cfg.batch, shuffle=True)
+    test_loader  = DataLoader(test_ds,  batch_size=cfg.batch, shuffle=False)
 
-    input_dim = ds.X.shape[1]
-    model = MLP(input_dim=input_dim, hidden=HIDDEN, num_classes=10).to(device)
-    LOG.info("run_dir=%s  train=%d  dev=%d  feature='%s'  device=%s",
-             run_dir, len(train_ds), len(dev_ds), feat, device)
+    os.makedirs(mdl_root, exist_ok=True)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    assert train_ds.X.shape[1] == cfg.layers[0], \
+        f"Input dim mismatch: data has {train_ds.X.shape[1]}, config has {cfg.layers[0]}"
+
+    model = MLP(layers=cfg.layers, activation=cfg.activation, dropout=cfg.dropout).to(device)
+    LOG.info("train=%d  test=%d  device=%s  layers=%s", len(train_ds), len(test_ds), device, cfg.layers)
+
+    optimizer = Adam(model.parameters(), lr=cfg.lr)
     criterion = nn.CrossEntropyLoss()
 
-    with open(os.path.join(run_dir, "batches.csv"), "w", newline="") as batch_fh, \
-         open(os.path.join(run_dir, "epochs.csv"),  "w", newline="") as epoch_fh:
+    with mlflow.start_run():
+        if run_tags:
+            mlflow.set_tags(run_tags)
+        mlflow.log_params({
+            "layers":     cfg.layers,
+            "activation": cfg.activation.__name__,
+            "dropout":    cfg.dropout,
+            "lr":         cfg.lr,
+            "batch":      cfg.batch,
+        })
 
-        bw = csv.writer(batch_fh)
-        ew = csv.writer(epoch_fh)
-        bw.writerow(["step", "epoch", "loss", "train_acc"])
-        ew.writerow(["epoch", "train_loss", "train_acc", "dev_acc"])
-
-        step = 0
-        best_dev_acc = 0.0
+        best_test_acc = 0.0
         n_worse = 0
         n_perfect_train = 0
 
@@ -119,64 +146,69 @@ def train(fpath_h5: str, mdl_root: str, devset_size: int = DEVSET_SIZE) -> None:
                 loss.backward()
                 optimizer.step()
 
-                batch_loss = loss.item()
-                batch_acc  = (logits.argmax(1) == y_batch).float().mean().item()
-                bw.writerow([step, epoch, f"{batch_loss:7.3f}", f"{batch_acc:.6f}"])
-                batch_fh.flush()
-
-                total_loss += batch_loss * len(y_batch)
+                total_loss += loss.item() * len(y_batch)
                 correct    += (logits.argmax(1) == y_batch).sum().item()
                 total      += len(y_batch)
-                step       += 1
 
             train_acc  = correct / total
             train_loss = total_loss / total
-            dev_acc    = _eval_acc(model, dev_loader, device)
+            test_acc   = _eval_acc(model, test_loader, device)
 
-            ew.writerow([epoch, f"{train_loss:7.3f}", f"{train_acc:.6f}", f"{dev_acc:.6f}"])
-            epoch_fh.flush()
+            mlflow.log_metrics({"train_loss": train_loss, "train_acc": train_acc, "test_acc": test_acc}, step=epoch)
 
             if train_acc >= 1.0:
                 n_perfect_train += 1
-                if n_perfect_train >= PATIENCE_TRAIN_ACC:
-                    LOG.info("epoch %4d train_acc 100%% for %d consecutive epochs — stopping", epoch, PATIENCE_TRAIN_ACC) 
+                if n_perfect_train >= cfg.patience_train_acc:
+                    LOG.info("epoch %4d train_acc 100%% for %d consecutive epochs — stopping", epoch, cfg.patience_train_acc)
                     break
             else:
                 n_perfect_train = 0
 
-            if dev_acc > 0.99999 or epoch % 10 == 0 or epoch == EPOCHS - 1:
-                LOG.info("epoch %4d  loss %.4f  train_acc %.5f  dev_acc %.5f", epoch, train_loss, train_acc, dev_acc)
+            if test_acc > 0.99999 or epoch % 10 == 0 or epoch == EPOCHS - 1:
+                LOG.info("epoch %4d  loss %.4f  train_acc %.5f  test_acc %.5f", epoch, train_loss, train_acc, test_acc)
 
-            if dev_acc <= best_dev_acc:
+            if test_acc <= best_test_acc:
                 n_worse += 1
-                if n_worse >= PATIENCE:
+                if n_worse >= cfg.patience:
                     break
             else:
                 n_worse = 0
-                best_dev_acc = dev_acc
-                if dev_acc > MIN_ACC:
-                    dname_mdl = f"mlp-{feat}_e{epoch:04d}_acc={dev_acc:.3f}"
-                    LOG.info("epoch %4d  loss %.4f  train_acc %.5f  dev_acc %.5f <- BEST (saving: %s)", epoch, train_loss, train_acc, dev_acc, dname_mdl)
-                    dpath_mdl = os.path.join(run_dir, dname_mdl)
+                best_test_acc = test_acc
+                LOG.info("epoch %4d  loss %.4f  train_acc %.5f  test_acc %.5f <- BEST", epoch, train_loss, train_acc, test_acc)
+                if test_acc > cfg.min_acc:
+                    dname_mdl = f"mlp-mnist_e{epoch:04d}_acc={test_acc:.3f}"
+                    dpath_mdl = os.path.join(mdl_root, dname_mdl)
                     os.makedirs(dpath_mdl, exist_ok=True)
                     torch.save(model.state_dict(), os.path.join(dpath_mdl, "model.pt"))
-                    with open(os.path.join(dpath_mdl, "meta.json"), "w") as f:
+                    meta_path = os.path.join(dpath_mdl, "meta.json")
+                    with open(meta_path, "w") as f:
                         json.dump({
-                            "feat":      feat,
-                            "classes":   ds.classes,
-                            "input_dim": input_dim,
-                            "hidden":    HIDDEN,
-                            "mean":      ds.mean.tolist(),
-                            "std":       ds.std.tolist(),
+                            "feat":       "mnist",
+                            "classes":    train_ds.classes,
+                            "layers":     cfg.layers,
+                            "activation": cfg.activation.__name__,
+                            "dropout":    cfg.dropout,
+                            "mean":       train_ds.mean.tolist(),
+                            "std":        train_ds.std.tolist(),
                         }, f, indent=2)
-                if dev_acc > 0.9999999:
+                    mlflow.log_artifact(meta_path)
+                if test_acc > 0.9999999:
                     break
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]   %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    mlflow.set_tracking_uri("sqlite:///" + os.path.join(BLD_DIR, "mlflow.db"))
+    mlflow.set_experiment("CKKS - exp03 - MNIST")
+    cfg_name = sys.argv[1] if len(sys.argv) > 1 else "baseline"
+    if cfg_name not in CONFIGS:
+        print(f"Unknown config '{cfg_name}'. Available: {list(CONFIGS)}")
+        sys.exit(1)
+    cfg = CONFIGS[cfg_name]
+    fea_dir = os.path.join(BLD_DIR, "fea")
     train(
-        fpath_h5 = os.path.join(BLD_DIR, "fea", "mnist.h5"),
-        mdl_root = os.path.join(BLD_DIR, "mdl", "exp03"),
+        fpath_train_h5=os.path.join(fea_dir, "mnist-train.h5"),
+        fpath_test_h5 =os.path.join(fea_dir, "mnist-test.h5"),
+        mdl_root      =os.path.join(BLD_DIR, "mdl", "exp03"),
+        cfg           =cfg,
     )
-

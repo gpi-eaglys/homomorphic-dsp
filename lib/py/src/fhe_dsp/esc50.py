@@ -63,3 +63,4 @@ class Esc50Dataset(Dataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
         return torch.from_numpy(self.X[idx]), self.y[idx]
+

@@ -1,16 +1,19 @@
 """
-Download MNIST test set and save pixel features to build/fea/mnist.h5.
+Extract pixel features from downloaded MNIST gz files and save to build/fea/.
 
-H5 layout:
-    X: (10000, 784) float32 — raw pixels scaled to [0, 1]
-    y: (10000,)    int64   — class labels 0–9
+Output files:
+    mnist-train.h5  — 60000 samples
+    mnist-test.h5   —  10000 samples
+
+H5 layout per file:
+    X: (N, 784) float32 — raw pixels scaled to [0, 1]
+    y: (N,)     int64   — class labels 0–9
 """
 
 import gzip
 import logging
 import os
 import struct
-import urllib.request
 
 import h5py
 import numpy as np
@@ -19,20 +22,10 @@ from common import BLD_DIR, MNIST_ROOT
 
 LOG = logging.getLogger(__name__)
 
-_BASE = "https://storage.googleapis.com/cvdf-datasets/mnist/"
-_FILES = {
-    "images": "t10k-images-idx3-ubyte.gz",
-    "labels": "t10k-labels-idx1-ubyte.gz",
+_SPLITS = {
+    "train": ("train-images-idx3-ubyte.gz", "train-labels-idx1-ubyte.gz"),
+    "test":  ("t10k-images-idx3-ubyte.gz",  "t10k-labels-idx1-ubyte.gz"),
 }
-
-
-def _download(fname: str, dest_dir: str) -> str:
-    fpath = os.path.join(dest_dir, fname)
-    if not os.path.isfile(fpath):
-        url = _BASE + fname
-        LOG.info("Downloading %s ...", url)
-        urllib.request.urlretrieve(url, fpath)
-    return fpath
 
 
 def _load_images(fpath_gz: str) -> np.ndarray:
@@ -52,18 +45,17 @@ def _load_labels(fpath_gz: str) -> np.ndarray:
 
 
 def main() -> None:
-    os.makedirs(MNIST_ROOT, exist_ok=True)
     fea_dir = os.path.join(BLD_DIR, "fea")
     os.makedirs(fea_dir, exist_ok=True)
 
-    X = _load_images(_download(_FILES["images"], MNIST_ROOT))
-    y = _load_labels(_download(_FILES["labels"], MNIST_ROOT))
-
-    fpath_h5 = os.path.join(fea_dir, "mnist.h5")
-    with h5py.File(fpath_h5, "w") as f:
-        f.create_dataset("X", data=X)
-        f.create_dataset("y", data=y)
-    LOG.info("Saved %d samples -> %s", len(y), fpath_h5)
+    for split, (img_file, lbl_file) in _SPLITS.items():
+        X = _load_images(os.path.join(MNIST_ROOT, img_file))
+        y = _load_labels(os.path.join(MNIST_ROOT, lbl_file))
+        fpath_h5 = os.path.join(fea_dir, f"mnist-{split}.h5")
+        with h5py.File(fpath_h5, "w") as f:
+            f.create_dataset("X", data=X)
+            f.create_dataset("y", data=y)
+        LOG.info("Saved %d samples -> %s", len(y), fpath_h5)
 
 
 if __name__ == "__main__":

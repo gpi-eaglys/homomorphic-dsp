@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 from common import BLD_DIR
-from train_mlp import MLP
+from train_mlp import ACTIVATION_MAP, MLP
 
 LOG = logging.getLogger(__name__)
 
@@ -46,8 +46,10 @@ def export_model(dpath_mdl: str) -> None:
         LOG.info("Skipping (already exported): %s", fpath_out)
         return
 
-    hidden = meta["hidden"]  # list[int]
-    model = MLP(input_dim=meta["input_dim"], hidden=hidden, num_classes=len(meta["classes"]))
+    layers     = meta["layers"]  # full spec: [input, hidden..., output]
+    activation = ACTIVATION_MAP[meta.get("activation", "GELU")]
+    dropout    = meta.get("dropout", 0.0)
+    model = MLP(layers=layers, activation=activation, dropout=dropout)
     model.load_state_dict(torch.load(os.path.join(dpath_mdl, "model.pt"), weights_only=True, map_location="cpu"))
     model.eval()
 
@@ -55,7 +57,8 @@ def export_model(dpath_mdl: str) -> None:
     linear_layers = [m for m in model.net if isinstance(m, torch.nn.Linear)]
     layer_params  = [_layer_params(l) for l in linear_layers]
 
-    all_dims = [meta["input_dim"]] + hidden + [len(meta["classes"])]
+    all_dims = layers
+    hidden   = layers[1:-1]
     dim = next_pow2(max(all_dims))
     LOG.info("packed_dim = %d", dim)
 
@@ -63,9 +66,9 @@ def export_model(dpath_mdl: str) -> None:
     std  = np.array(meta["std"])
 
     doc = {
-        "input_dim":   meta["input_dim"],
+        "input_dim":   layers[0],
         "hidden":      hidden,
-        "num_classes": len(meta["classes"]),
+        "num_classes": layers[-1],
         "packed_dim":  dim,
         "classes":     meta["classes"],
         "mean":        pad(mean, dim),
