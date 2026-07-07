@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
 import re
 import shutil
@@ -29,6 +30,8 @@ from common import BLD_DIR
 MDL_ROOT = os.path.join(BLD_DIR, "mdl", "exp03")
 
 EPOCH_DIR_RE = re.compile(r"^e(\d+)$")
+
+LOG = logging.getLogger(__name__)
 
 
 def _checkpoints(dpath_run: str) -> list[tuple[int, str]]:
@@ -59,19 +62,23 @@ def main() -> None:
         return
 
     rows = []
+    deleted_count = 0
     for dname_run in sorted(os.listdir(MDL_ROOT)):
         dpath_run = os.path.join(MDL_ROOT, dname_run)
         if not os.path.isdir(dpath_run):
             continue
 
         checkpoints = _checkpoints(dpath_run)
-        last = checkpoints[-1][1] if checkpoints else "-"
 
         if args.trim:
             for _, name in checkpoints[:-1]:
                 dpath_old = os.path.join(dpath_run, name)
                 shutil.rmtree(dpath_old)
-                print(f"  trimmed {dpath_old}", file=sys.stderr)
+                LOG.info("deleted %s", dpath_old)
+                deleted_count += 1
+            continue
+
+        last = checkpoints[-1][1] if checkpoints else "-"
 
         cfg    = _load_json(os.path.join(dpath_run, "config.json"))
         result = _load_json(os.path.join(dpath_run, "result.json"))
@@ -87,12 +94,21 @@ def main() -> None:
 
         rows.append((best_test_acc, last, param_hash, activation, dropout, lr, layers))
 
+    if args.trim:
+        if deleted_count == 0:
+            LOG.info("No directories were deleted")
+        else:
+            LOG.info("Deleted %d director%s", deleted_count, "y" if deleted_count == 1 else "ies")
+        return
+
     # nan (no result.json yet — still-running/orphaned run) sorts last, not first
     rows.sort(key=lambda row: row[0] if row[0] == row[0] else -1.0, reverse=True)
 
-    for best_test_acc, last, param_hash, activation, dropout, lr, layers in rows:
-        print(f"  {last:<6s}  {best_test_acc:.5f}  {param_hash:<12s}  {activation:<9s}  {dropout:.5f}  {lr:.5f}  {str(layers):<30s}")
+    for i, (best_test_acc, last, param_hash, activation, dropout, lr, layers) in enumerate(rows, 1):
+        serial = f"{i}."
+        print(f"{serial:<5s}  {last:<6s}  {best_test_acc:.5f}  {param_hash:<12s}  {activation:<9s}  {dropout:.5f}  {lr:.5f}  {str(layers):<30s}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]   %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     main()

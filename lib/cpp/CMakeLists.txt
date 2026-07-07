@@ -36,3 +36,10 @@ target_include_directories(infer_plaintext PUBLIC
     ${LIB_CPP_DIR}
     ${NLOHMANN_INCLUDE}
 )
+
+# Each experiment's binaries live in its own CMakeLists.txt
+# , not
+# here — keeps lib/cpp limited to shared infrastructure (OpenFHE build,
+# generic fixed-3-layer sample) instead of accumulating every experiment's
+# architecture-specific inference code.
+add_subdirectory(${REPO_ROOT}/exp03-mnist ${CMAKE_BINARY_DIR}/exp03-mnist)
