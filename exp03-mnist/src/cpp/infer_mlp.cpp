@@ -26,13 +26,15 @@
 //  line per sample.
 //
 //  Usage:
-//    infer_mlp <model.json> <features.txt> <key_file>
+//    infer_mlp <model.json> <features.txt> <id_file> <output.txt>
 //
 //    model.json    exported by export_mdl.py
-//    features.txt  exported by export_features.py  (one sample per line: key f0 f1 ...)
-//    key_file      one sample key per line; only these samples are processed
+//    features.txt  exported by export_features.py  (one sample per line: id f0 f1 ...)
+//    id_file       one sample id per line; only these samples are processed
+//    output.txt    results are written here (one line per sample: id logit_0 ... logit_9)
 // ============================================================================
 
+#include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -96,29 +98,35 @@ static Ciphertext<DCRTPoly> matVec(
 
 // ---------------------------------------------------------------------------
 int main(int argc, char** argv) {
-    if (argc != 4) {
-        std::cerr << "Usage: infer_mlp <model.json> <features.txt> <key_file>\n"
+    if (argc != 5) {
+        std::cerr << "Usage: infer_mlp <model.json> <features.txt> <id_file> <output.txt>\n"
                   << "  model.json    exported by 'export_mdl.py'\n"
                   << "  features.txt  exported by 'export_features.py'\n"
-                  << "  key_file      one sample key per line\n";
+                  << "  id_file       one sample id per line\n"
+                  << "  output.txt    results are written here\n";
         return 1;
     }
-    std::string modelPath   = argv[1];
-    std::string featPath    = argv[2];
-    std::string keyFilePath = argv[3];
+    std::string modelPath  = argv[1];
+    std::string featPath   = argv[2];
+    std::string idFilePath = argv[3];
+    std::string outPath    = argv[4];
 
-    // ---- 0. Load keys to process -------------------------------------------
-    std::unordered_set<std::string> targetKeys;
+    // ---- 0. Load ids to process ---------------------------------------------
+    std::unordered_set<std::string> targetIds;
     {
-        std::ifstream kf(keyFilePath);
-        if (!kf) { std::cerr << "cannot open key file: " << keyFilePath << "\n"; return 1; }
-        std::string k;
-        while (std::getline(kf, k))
-            if (!k.empty()) targetKeys.insert(k);
+        std::ifstream idf(idFilePath);
+        if (!idf) { std::cerr << "cannot open id file: " << idFilePath << "\n"; return 1; }
+        std::string id;
+        while (std::getline(idf, id))
+            if (!id.empty()) targetIds.insert(id);
     }
-    if (targetKeys.empty()) return 0;
+    if (targetIds.empty()) return 0;
+    std::cerr << "Running " << targetIds.size() << " inference(s)\n";
 
-    std::cout << std::setprecision(10);
+    std::ofstream out(outPath);
+    if (!out) { std::cerr << "cannot open output file: " << outPath << "\n"; return 1; }
+    out << std::setprecision(10);
+
     MlpModel m = loadMlpModel(modelPath);
     const int dim        = m.packed_dim;
     const int numLayers  = static_cast<int>(m.W_diag.size());
@@ -145,16 +153,21 @@ int main(int argc, char** argv) {
     for (int r = 1; r < dim; ++r) rots.push_back(r);
     cc->EvalRotateKeyGen(keys.secretKey, rots);
 
-    // ---- 2. Iterate features, process matching keys ------------------------
+    // ---- 2. Iterate features, process matching ids --------------------------
     std::ifstream f(featPath);
     if (!f) { std::cerr << "cannot open features: " << featPath << "\n"; return 1; }
+
+    const size_t total = targetIds.size();
+    size_t done = 0;
 
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ss(line);
-        std::string key;
-        ss >> key;
-        if (targetKeys.find(key) == targetKeys.end()) continue;
+        std::string id;
+        ss >> id;
+        if (targetIds.find(id) == targetIds.end()) continue;
+
+        auto t0 = std::chrono::steady_clock::now();
 
         // Client: read + normalize + encrypt
         std::vector<double> feat(dim, 0.0);
@@ -178,12 +191,19 @@ int main(int argc, char** argv) {
         res->SetLength(m.num_classes);
         std::vector<double> logits = res->GetRealPackedValue();
 
-        std::cout << key;
+        out << id;
         for (int i = 0; i < m.num_classes; ++i)
-            std::cout << "  " << logits[i];
-        std::cout << "\n";
-        std::cout.flush();
+            out << "\t" << logits[i];
+        out << "\n";
+        out.flush();
+
+        ++done;
+        double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::cerr << "[" << done << "/" << total << "] sample " << id << " complete in "
+                   << std::fixed << std::setprecision(1) << secs << " sec\n";
     }
+
+    std::cerr << "Inference results were written to " << outPath << "\n";
 
     return 0;
 }

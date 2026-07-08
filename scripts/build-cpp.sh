@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR=$(realpath "${SCRIPT_DIR}/..")
-BLD_DIR_REL="${REPO_DIR}/build/cmake/cmake-build-release"
-BLD_DIR_DBG="${REPO_DIR}/build/cmake/cmake-build-debug"
+BLD_DIR_REL="${REPO_DIR}/build/cmake-build-release"
+BLD_DIR_DBG="${REPO_DIR}/build/cmake-build-debug"
 
 cmake -B "${BLD_DIR_REL}" -S "${REPO_DIR}/lib/cpp" -DCMAKE_BUILD_TYPE=Release \
     -DWITH_NATIVEOPT=ON \

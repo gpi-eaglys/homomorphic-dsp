@@ -80,17 +80,18 @@ PYTHONPATH=src/py .venv/bin/python src/py/export_features.py
 
 
 ```bash
-# key_file: one sample key per line, from build/fea/mnist.txt's first column
-head -3 build/fea/mnist.txt | awk '{print $1}' > /tmp/keys.txt
+# id_file: one sample id per line, from build/fea/mnist.txt's first column
+head -3 build/fea/mnist.txt | awk '{print $1}' > /tmp/ids.txt
 
 ./build/cmake/cmake-build-release/exp03-mnist/infer_mlp \
     build/mdl/exp03/mlp-mnist_<param_hash>/eNNNN/ckks_model.json \
     build/fea/mnist.txt \
-    /tmp/keys.txt
+    /tmp/ids.txt \
+    /tmp/results.txt
 ```
 
-Prints one line per sample: `<key>  <logit_0>  <logit_1>  ...  <logit_9>` — the
-predicted class is `argmax` of the logits. `src/cpp/infer_mlp.cpp` discovers however
+Writes one line per sample to `output.txt`: `<id>\t<logit_0>\t<logit_1>\t...\t<logit_9>`
+— the predicted class is `argmax` of the logits. `src/cpp/infer_mlp.cpp` discovers however
 many `Wi_diag/bi` layer pairs the model actually has (not hardcoded to a fixed depth),
 so it works for any exported MLP, not just single-hidden-layer ones. Rebuild after
 changing it with `../scripts/build-cpp.sh` (from repo root).
