@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
 
-from train_mlp import ACTIVATION_MAP, MnistDataset, Quadratic, _eval_acc
+from mnist_data import MnistDataset, eval_acc
 
 EPOCHS = 100000
 SEED   = 42
@@ -166,7 +166,7 @@ def train(fpath_train_h5: str, fpath_test_h5: str, mdl_root: str, cfg: Experimen
 
             train_acc  = correct / total
             train_loss = total_loss / total
-            test_acc   = _eval_acc(model, test_loader, device)
+            test_acc   = eval_acc(model, test_loader, device)
 
             mlflow.log_metrics({"train_loss": train_loss, "train_acc": train_acc, "test_acc": test_acc}, step=epoch)
 

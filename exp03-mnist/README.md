@@ -1,5 +1,6 @@
 # MNIST - plaintext
 * exp03 trains Multi-Layer Perceptron (MLP) models for MNIST classificaiton task
+* see [exp04-mnist](../exp04-mnist) for the CNN counterpart
 
 ## GPU setup
 

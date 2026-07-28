@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the MLflow CNN grid search for exp03-mnist.
+# Run the MLflow CNN grid search for exp04-mnist.
 # Results are tracked in build/mlflow.db and viewable at http://<host>:10007
 #
 # Usage:

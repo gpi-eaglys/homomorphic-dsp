@@ -89,7 +89,7 @@ def _is_ckks_exportable(dpath_mdl: str) -> bool:
         return False
     with open(meta_path) as f:
         meta = json.load(f)
-    layers = meta.get("layers")  # absent for CNN checkpoints (conv_channels/fc_layers instead)
+    layers = meta.get("layers")
     return meta.get("activation") == "Quadratic" and layers is not None and len(layers) == 3
 
 
@@ -107,8 +107,7 @@ def export_all(mdl_root: str) -> None:
         LOG.warning("No models found under %s", mdl_root)
         return
 
-    # Only Quadratic (polynomial, CKKS-evaluable) single-hidden-layer MLPs are
-    # exportable — see is_ckks_compatible()-style reasoning in train_cnn.py.
+    # Only Quadratic (polynomial, CKKS-evaluable) single-hidden-layer MLPs are exportable.
     exportable = [d for d in mdl_dirs if _is_ckks_exportable(d)]
     LOG.info("Found %d model(s), %d exportable (Quadratic, single hidden layer)", len(mdl_dirs), len(exportable))
     for dpath_mdl in exportable:

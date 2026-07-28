@@ -10,12 +10,12 @@ import torch
 import torch.nn as nn
 
 from common import BLD_DIR
-from train_mlp import Quadratic
+from mnist_data import Quadratic
 from train_cnn import ExperimentConfig, train
 
 LOG = logging.getLogger(__name__)
 
-EXPERIMENT_NAME = "exp03-mnist-cnn"
+EXPERIMENT_NAME = "exp04-mnist-cnn"
 
 # kernel_size and fc_layers are fixed (not swept) to keep the grid a
 # manageable size — conv_channels already covers topology depth/width.
@@ -86,7 +86,7 @@ def run_grid() -> None:
     schema_hash = _schema_hash(HASHED_PARAMS)
 
     fea_dir  = os.path.join(BLD_DIR, "fea")
-    mdl_root = os.path.join(BLD_DIR, "mdl", "exp03")
+    mdl_root = os.path.join(BLD_DIR, "mdl", "exp04")
     run_id   = f"{socket.gethostname()}-{os.getpid()}"
 
     keys   = list(GRID.keys())

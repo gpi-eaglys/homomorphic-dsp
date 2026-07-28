@@ -1,12 +1,12 @@
 """
-Walk build/mdl/exp03 and, for each parameter setting (one directory per
-param_hash, e.g. mlp-mnist_<hash>/), find and print the last (highest-epoch)
+Walk build/mdl/exp04 and, for each parameter setting (one directory per
+param_hash, e.g. cnn-mnist_<hash>/), find and print the last (highest-epoch)
 model dump — the one saved from that setting's best checkpoint, since
-checkpoints are only ever saved on a new best test_acc.
-Settings that never crossed min_acc have no checkpoint; "-" is printed in
-its place, but best_test_acc/config fields still show since those are
-written unconditionally (result.json/config.json), independent of whether
-a checkpoint was ever saved.
+checkpoints are only ever saved on a new best test_acc. Settings that never
+crossed min_acc have no checkpoint; "-" is printed in its place, but
+best_test_acc/config fields still show since those are written
+unconditionally (result.json/config.json), independent of whether a
+checkpoint was ever saved.
 
 Pass --trim to additionally delete every non-best checkpoint dir for each
 setting — keeps only the last (highest-accuracy) one, permanently removing
@@ -14,7 +14,7 @@ the earlier model.pt/meta.json dumps. Off by default; this is real deletion,
 not reversible like MLflow's soft-delete.
 
 Usage:
-    .venv/bin/python exp03-mnist/src/py/trim-build-dir.py [--trim]
+    .venv/bin/python exp04-mnist/src/py/trim-build-dir.py [--trim]
 """
 
 import argparse
@@ -27,7 +27,7 @@ import sys
 
 from common import BLD_DIR
 
-MDL_ROOT = os.path.join(BLD_DIR, "mdl", "exp03")
+MDL_ROOT = os.path.join(BLD_DIR, "mdl", "exp04")
 
 EPOCH_DIR_RE = re.compile(r"^e(\d+)$")
 
@@ -88,11 +88,10 @@ def main() -> None:
         activation    = cfg.get("activation", "?")
         dropout       = cfg.get("dropout", float("nan"))
         lr            = cfg.get("lr", float("nan"))
-        layers        = cfg.get("layers", [])
-        if len(layers) >= 2:
-            layers = layers[1:-1]  # input/output layers are fixed and shared across all configs
+        pool          = cfg.get("pool", "?")
+        conv_channels = cfg.get("conv_channels", [])
 
-        rows.append((best_test_acc, last, param_hash, activation, dropout, lr, layers))
+        rows.append((best_test_acc, last, param_hash, activation, dropout, lr, pool, conv_channels))
 
     if args.trim:
         if deleted_count == 0:
@@ -104,9 +103,10 @@ def main() -> None:
     # nan (no result.json yet — still-running/orphaned run) sorts last, not first
     rows.sort(key=lambda row: row[0] if row[0] == row[0] else -1.0, reverse=True)
 
-    for i, (best_test_acc, last, param_hash, activation, dropout, lr, layers) in enumerate(rows, 1):
+    for i, (best_test_acc, last, param_hash, activation, dropout, lr, pool, conv_channels) in enumerate(rows, 1):
         serial = f"{i}."
-        print(f"{serial:<5s}  {last:<6s}  {best_test_acc:.5f}  {param_hash:<12s}  {activation:<9s}  {dropout:.5f}  {lr:.5f}  {str(layers):<30s}")
+        print(f"{serial:<5s}  {last:<6s}  {best_test_acc:.5f}  {param_hash:<12s}  {activation:<9s}  "
+              f"{dropout:.5f}  {lr:.5f}  {pool:<5s}  {str(conv_channels):<20s}")
 
 
 if __name__ == "__main__":

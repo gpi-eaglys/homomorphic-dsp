@@ -6,6 +6,7 @@
     "exp01-esc10/src/py",
     "exp02-esc50/src/py",
     "exp03-mnist/src/py",
+    "exp04-mnist/src/py",
     "exp00-ckks/src",
     "lib/py"
   ]

@@ -222,3 +222,4 @@ assets/
 # artifacts from runs launched with an unset/relative tracking URI)
 mlflow.db
 mlruns/
+.idea

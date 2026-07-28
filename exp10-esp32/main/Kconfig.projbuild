@@ -1,0 +1,35 @@
+menu "Homomorphic DSP ESP32 (exp10) Configuration"
+
+    config HDSP_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+
+    config HDSP_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+
+    config HDSP_SERVER_HOST
+        string "Server host or IP"
+        default "192.168.1.100"
+
+    config HDSP_SERVER_PORT
+        int "Server TCP port"
+        default 5000
+
+    config HDSP_SAMPLE_RATE_HZ
+        int "Audio sample rate (Hz)"
+        default 16000
+
+    config HDSP_I2S_WS_GPIO
+        int "I2S WS / LRCLK GPIO"
+        default 15
+
+    config HDSP_I2S_SCK_GPIO
+        int "I2S SCK / BCLK GPIO"
+        default 14
+
+    config HDSP_I2S_SD_GPIO
+        int "I2S SD / DIN GPIO (mic data out)"
+        default 32
+
+endmenu

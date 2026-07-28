@@ -1,0 +1,3 @@
+# app_main does WiFi connect + I2S read + TCP send on the default stack;
+# bump it to avoid overflow before the pipeline is profiled.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
