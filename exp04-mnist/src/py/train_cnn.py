@@ -47,7 +47,7 @@ class ExperimentConfig:
 
 
 def is_ckks_compatible(cfg: ExperimentConfig) -> bool:
-    return cfg.pool == "avg" and cfg.activation.__name__ != "ReLU"
+    return cfg.pool == "avg" and cfg.activation.__name__ == "Quadratic"
 
 
 class CNN(nn.Module):

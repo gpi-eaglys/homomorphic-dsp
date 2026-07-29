@@ -46,6 +46,7 @@
 
 #include <nlohmann/json.hpp>
 #include "openfhe.h"
+#include "halevi_shoup.h"
 
 using namespace lbcrypto;
 
@@ -76,24 +77,6 @@ inline MlpModel loadMlpModel(const std::string& path) {
     }
     if (m.W_diag.empty()) throw std::runtime_error("model has no layers (W1_diag missing): " + path);
     return m;
-}
-
-// ---------------------------------------------------------------------------
-// Halevi-Shoup diagonal matrix-vector product:  out = W . x
-static Ciphertext<DCRTPoly> matVec(
-        const CryptoContext<DCRTPoly>& cc,
-        const std::vector<std::vector<double>>& diags,
-        const Ciphertext<DCRTPoly>& x,
-        int dim)
-{
-    Ciphertext<DCRTPoly> acc;
-    for (int i = 0; i < dim; ++i) {
-        Plaintext pt              = cc->MakeCKKSPackedPlaintext(diags[i]);
-        Ciphertext<DCRTPoly> xr   = (i == 0) ? x : cc->EvalRotate(x, i);
-        Ciphertext<DCRTPoly> term = cc->EvalMult(xr, pt);
-        acc = (i == 0) ? term : cc->EvalAdd(acc, term);
-    }
-    return acc;
 }
 
 // ---------------------------------------------------------------------------

@@ -43,3 +43,4 @@ target_include_directories(infer_plaintext PUBLIC
 # generic fixed-3-layer sample) instead of accumulating every experiment's
 # architecture-specific inference code.
 add_subdirectory(${REPO_ROOT}/exp03-mnist ${CMAKE_BINARY_DIR}/exp03-mnist)
+add_subdirectory(${REPO_ROOT}/exp04-mnist ${CMAKE_BINARY_DIR}/exp04-mnist)

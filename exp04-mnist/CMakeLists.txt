@@ -1,6 +1,6 @@
-# exp03-mnist's CKKS inference binaries.
+# exp04-mnist's CKKS inference binaries.
 #
-# To be included via add_subdirectory() from lib/cpp/CMakeLists.txt, 
+# To be included via add_subdirectory() from lib/cpp/CMakeLists.txt.
 #
 # Inherited from parent CMakeLists:
 # - REPO_ROOT
@@ -8,11 +8,11 @@
 # - NLOHMANN_INCLUDE
 # - LIB_CPP_DIR
 
-set(EXP03_SRC_CPP ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp)
+set(EXP04_SRC_CPP ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp)
 
-add_executable(infer_mlp ${EXP03_SRC_CPP}/infer_mlp.cpp)
+add_executable(infer_cnn ${EXP04_SRC_CPP}/infer_cnn.cpp)
 
-target_include_directories(infer_mlp PUBLIC
+target_include_directories(infer_cnn PUBLIC
     ${LIB_CPP_DIR}                              # halevi_shoup.h
     ${OPENFHE_SOURCE_DIR}/src/pke/include
     ${OPENFHE_SOURCE_DIR}/src/core/include
@@ -21,8 +21,7 @@ target_include_directories(infer_mlp PUBLIC
     ${CMAKE_BINARY_DIR}/openfhe/src/core       # generated config_core.h
     ${NLOHMANN_INCLUDE}
 )
-target_link_libraries(infer_mlp PUBLIC OPENFHEpke_static OPENFHEcore_static)
+target_link_libraries(infer_cnn PUBLIC OPENFHEpke_static OPENFHEcore_static)
 if(OpenMP_CXX_FOUND)
-    target_link_libraries(infer_mlp PUBLIC OpenMP::OpenMP_CXX)
+    target_link_libraries(infer_cnn PUBLIC OpenMP::OpenMP_CXX)
 endif()
-
