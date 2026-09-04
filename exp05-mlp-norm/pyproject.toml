@@ -1,0 +1,11 @@
+[project]
+name = "exp05"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fhe-dsp",
+    "mlflow",
+]
+
+[tool.uv.sources]
+fhe-dsp = { workspace = true }

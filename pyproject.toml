@@ -19,6 +19,7 @@ members = [
     "exp02-esc50",
     "exp03-mnist",
     "exp04-mnist",
+    "exp05-mlp-norm",
 ]
 
 [tool.uv]
